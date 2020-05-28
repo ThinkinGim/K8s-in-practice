@@ -1,6 +1,4 @@
-import os 
 import typing
-import yaml
 from aws_cdk import (
     aws_eks as eks,
     aws_ec2 as ec2,
@@ -10,7 +8,7 @@ from aws_cdk import (
 
 class Stack_Parameter_Group():
 
-    def __init__(self, cluster_id:typing.Optional[str]=None, vpc_id:typing.Optional[str]=None, subnet_ids:typing.Optional[typing.List[str]]=None) -> None:
+    def __init__(self, cluster_id:str, vpc_id:str, subnets:[ec2.ISubnet] ) -> None:
         """Stack Parameters
 
         :param cluster_id: 
@@ -18,47 +16,66 @@ class Stack_Parameter_Group():
         :param subnet_ids:
         """
         self._params = {}
-        if cluster_id is not None: self._params["cluster_id"] = cluster_id
-        if vpc_id is not None: self._params["vpc_id"] = vpc_id
-        if subnet_ids is not None: self._params["subnet_ids"] = subnet_ids
+        self._params["cluster_id"] = cluster_id
+        self._params["vpc_id"] = vpc_id
+        self._params["subnets"] = subnets
 
     @property
-    def cluster_subnet_list(self) -> typing.Optional[typing.List[str]]:
-        return self._params.get('subnet_ids')
+    def cluster_subnets(self) -> [ec2.ISubnet]:
+        return self._params.get('subnets')
 
     @property
-    def cluster_id(self) -> typing.Optional[str]:
+    def cluster_id(self) -> str:
         return self._params.get('cluster_id')
 
     @property
-    def vpc_id(self) -> typing.Optional[str]:
+    def vpc_id(self) -> str:
         return self._params.get('vpc_id')
 
 class EksStack(core.Stack):
 
+    @property
+    def cluster(self) -> eks.Cluster:
+        return self._kip_cluster
+
+    @property
+    def cluster_subnets(self) -> [ec2.ISubnet]:
+        return self._cluster_subnets
+
     def __init__(self, scope: core.Construct, id: str, params:typing.Optional[Stack_Parameter_Group]=None, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
-        vpc=None
+        cluster_vpc=None
         cluster_id=id+"-cluster"
-        cluster_subnets=None
-
+        cluster_subnets=[]
+        
         if params is not None:
-            if params.cluster_id is not None: cluster_id=params.cluster_id
-            if params.vpc_id is not None:
-                vpc = ec2.Vpc.from_lookup(self, "VPC", vpc_id=params.vpc_id)
-                vpc_subnets = (vpc.isolated_subnets + vpc.private_subnets + vpc.public_subnets)
+        #     if params.cluster_id is not None: cluster_id=params.cluster_id
+            cluster_vpc = ec2.Vpc.from_lookup(self, "VPC", vpc_id=params.vpc_id)
+            # vpc_subnets = (cluster_vpc.private_subnets + cluster_vpc.public_subnets + cluster_vpc.isolated_subnets)
+            cluster_id = params.cluster_id
+            
+            # cluster_subnets_id = [i.subnet_id for i in params.cluster_subnet_list]
+            cluster_subnets = params.cluster_subnets
 
-                if params.cluster_subnet_list is not None:
-                    cluster_subnets = []
-                    for subnet in vpc_subnets:
-                        if any(subnet.subnet_id in s for s in params.cluster_subnet_list):
-                            cluster_subnets.append(ec2.SubnetSelection(subnets=[subnet]))
-                    if not cluster_subnets: cluster_subnets=None
-                else:
-                    cluster_subnets=vpc.private_subnets
+            print("DEBUG::cluster_subnets")
+            print(cluster_subnets)
 
-        kip_cluster = eks.Cluster(
+            self._cluster_subnets = cluster_subnets
+
+            # for subnet in vpc_subnets:
+            #     if any(subnet.subnet_id in s for s in cluster_subnets_id):
+            #         cluster_subnets.append(subnet)
+            # if not cluster_subnets: cluster_subnets=None
+
+        #         if params.cluster_subnet_list is not None:
+        #             self._cluster_subnets = []
+        #             for subnet in vpc_subnets:
+        #                 if any(subnet.subnet_id in s for s in params.cluster_subnet_list):
+        #                     self._cluster_subnets.append(subnet)
+        #             if not self._cluster_subnets: self._cluster_subnets=None
+
+        self._kip_cluster = eks.Cluster(
             self, 
             id=cluster_id,
             default_capacity=0,
@@ -72,6 +89,26 @@ class EksStack(core.Stack):
             # role=None,
             # security_group=None,
             # version=None,
-            vpc=vpc,
-            vpc_subnets=cluster_subnets
+            vpc=cluster_vpc,
+            vpc_subnets=[ec2.SubnetSelection(subnets=cluster_subnets)]
+        )
+
+class NodegroupStack(core.Stack):
+
+    def __init__(self, scope: core.Construct, id: str, target_cluster: eks.Cluster, vpc_subnets: [ec2.ISubnet], **kwargs) -> None:
+        super().__init__(scope, id, **kwargs)
+
+        eks.Nodegroup(
+            self,
+            id=id, 
+            cluster=target_cluster,
+            ami_type=eks.NodegroupAmiType.AL2_X86_64,
+            desired_size=1,
+            disk_size=20,
+            force_update=False,
+            instance_type=ec2.InstanceType.of(ec2.InstanceClass.BURSTABLE3, ec2.InstanceSize.MEDIUM),
+            max_size=1,
+            min_size=1,
+            nodegroup_name=id,
+            subnets=ec2.SubnetSelection(subnets=vpc_subnets)
         )
