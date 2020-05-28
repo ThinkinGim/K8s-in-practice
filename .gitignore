@@ -21,3 +21,6 @@ venv.bak/
 cdk-src/.cdk.staging/
 cdk-src/cdk.out/
 cdk-src/cdk.context.json
+
+# custom app for test
+cdk-src/app-*.py
