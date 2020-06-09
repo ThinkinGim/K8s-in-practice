@@ -31,22 +31,22 @@ class Subnets(core.Stack):
 
         vpc = ec2.Vpc.from_lookup(self, "VPC", vpc_id=vpc_id)
         selected_subnets = ec2.SubnetSelection(subnets=self._subnets)
-        ec2_endpoint = ec2.InterfaceVpcEndpoint(self, stack_id+"ec2", 
+        ec2.InterfaceVpcEndpoint(self, stack_id+"ec2", 
             vpc=vpc, 
             service=ec2.InterfaceVpcEndpointAwsService.E_C2,
             subnets=selected_subnets
         )
-        ecr_endpoint = ec2.InterfaceVpcEndpoint(self, stack_id+"ecr", 
+        ec2.InterfaceVpcEndpoint(self, stack_id+"ecr", 
             vpc=vpc, 
             service=ec2.InterfaceVpcEndpointAwsService.ECR,
             subnets=selected_subnets
         )
-        ecr_drk_endpoint = ec2.InterfaceVpcEndpoint(self, stack_id+"drk", 
+        ec2.InterfaceVpcEndpoint(self, stack_id+"drk", 
             vpc=vpc, 
             service=ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER,
             subnets=selected_subnets
         )
-        s3_endpoint = ec2.GatewayVpcEndpoint(self, stack_id+"s3", 
+        ec2.GatewayVpcEndpoint(self, stack_id+"s3", 
             vpc=vpc, 
             service=ec2.GatewayVpcEndpointAwsService.S3,
             subnets=[selected_subnets]

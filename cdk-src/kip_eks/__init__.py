@@ -3,6 +3,7 @@ from aws_cdk import (
     aws_eks as eks,
     aws_ec2 as ec2,
     aws_ecr as ecr,
+    aws_iam as iam,
     core
 )
 
@@ -46,34 +47,15 @@ class EksStack(core.Stack):
         super().__init__(scope, id, **kwargs)
 
         cluster_vpc=None
-        cluster_id=id+"-cluster"
+        cluster_id=id+'-cluster'
         cluster_subnets=[]
         
         if params is not None:
-        #     if params.cluster_id is not None: cluster_id=params.cluster_id
-            cluster_vpc = ec2.Vpc.from_lookup(self, "VPC", vpc_id=params.vpc_id)
-            # vpc_subnets = (cluster_vpc.private_subnets + cluster_vpc.public_subnets + cluster_vpc.isolated_subnets)
+            cluster_vpc = ec2.Vpc.from_lookup(self, 'VPC', vpc_id=params.vpc_id)
             cluster_id = params.cluster_id
-            
-            # cluster_subnets_id = [i.subnet_id for i in params.cluster_subnet_list]
             cluster_subnets = params.cluster_subnets
 
-            print("DEBUG::cluster_subnets")
-            print(cluster_subnets)
-
             self._cluster_subnets = cluster_subnets
-
-            # for subnet in vpc_subnets:
-            #     if any(subnet.subnet_id in s for s in cluster_subnets_id):
-            #         cluster_subnets.append(subnet)
-            # if not cluster_subnets: cluster_subnets=None
-
-        #         if params.cluster_subnet_list is not None:
-        #             self._cluster_subnets = []
-        #             for subnet in vpc_subnets:
-        #                 if any(subnet.subnet_id in s for s in params.cluster_subnet_list):
-        #                     self._cluster_subnets.append(subnet)
-        #             if not self._cluster_subnets: self._cluster_subnets=None
 
         self._kip_cluster = eks.Cluster(
             self, 
@@ -93,14 +75,17 @@ class EksStack(core.Stack):
             vpc_subnets=[ec2.SubnetSelection(subnets=cluster_subnets)]
         )
 
+
 class NodegroupStack(core.Stack):
 
-    def __init__(self, scope: core.Construct, id: str, target_cluster: eks.Cluster, vpc_subnets: [ec2.ISubnet], **kwargs) -> None:
+    def __init__(self, scope: core.Construct, id: str, target_cluster: eks.Cluster, vpc_id: str, vpc_subnets: [ec2.ISubnet], **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
+        cluster_vpc = ec2.Vpc.from_lookup(self, 'VPC', vpc_id=vpc_id)
+        node_group_id = "ng-"+id
         eks.Nodegroup(
             self,
-            id=id, 
+            id=node_group_id, 
             cluster=target_cluster,
             ami_type=eks.NodegroupAmiType.AL2_X86_64,
             desired_size=1,
@@ -109,6 +94,22 @@ class NodegroupStack(core.Stack):
             instance_type=ec2.InstanceType.of(ec2.InstanceClass.BURSTABLE3, ec2.InstanceSize.MEDIUM),
             max_size=1,
             min_size=1,
-            nodegroup_name=id,
+            nodegroup_name=node_group_id,
             subnets=ec2.SubnetSelection(subnets=vpc_subnets)
         )
+
+        repository = ecr.Repository(
+            self,
+            id=id,
+            image_scan_on_push=False,
+            repository_name=id
+        )
+
+        repository.add_to_resource_policy(iam.PolicyStatement(
+            sid="IPAllow",
+            effect=iam.Effect.ALLOW,
+            principals=[iam.AnyPrincipal()],
+            actions=["ecr:*"],
+            conditions=dict({"IpAddress":dict({"aws:SourceIp": cluster_vpc.vpc_cidr_block})})
+        ))
+
