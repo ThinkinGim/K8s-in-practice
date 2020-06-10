@@ -6,7 +6,7 @@ with open("README.md") as fp:
 
 
 setuptools.setup(
-    name="eks",
+    name="kip",
     version="0.0.1",
 
     description="A sample CDK Python app",
@@ -15,16 +15,15 @@ setuptools.setup(
 
     author="author",
 
-    package_dir={"": "eks"},
-    packages=setuptools.find_packages(where="eks"),
+    package_dir={"": "kip"},
+    packages=setuptools.find_packages(where="kip"),
 
     install_requires=[
         "aws-cdk.core==1.39.0",
         "aws-cdk.aws_iam==1.39.0",
-        "aws-cdk.aws_sqs==1.39.0",
-        "aws-cdk.aws_sns==1.39.0",
-        "aws-cdk.aws_sns_subscriptions==1.39.0",
-        "aws-cdk.aws_s3==1.39.0",
+        "aws-cdk.aws_eks==1.39.0",
+        "aws-cdk.aws_ecr==1.39.0",
+        "aws-cdk.aws_ec2==1.39.0",
     ],
 
     python_requires=">=3.6",
